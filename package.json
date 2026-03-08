@@ -1,0 +1,11 @@
+{
+  "name": "planet-proxy",
+  "version": "1.0.0",
+  "main": "planet-proxy.js",
+  "scripts": {
+    "start": "node planet-proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.22.1"
+  }
+}
