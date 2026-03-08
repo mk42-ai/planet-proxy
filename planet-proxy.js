@@ -59,11 +59,14 @@ function transformResponse(data) {
 }
 
 // POST /quick-search - proxy to Planet API and transform response
-app.post('/planet-proxy/quick-search', async (req, res) => {
+app.post('/quick-search', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
+    const apiKey = process.env.PLANET_API_KEY;
+    const authHeader = apiKey
+      ? `api-key ${apiKey}`
+      : req.headers['authorization'];
     if (!authHeader) {
-      return res.status(401).json({ error: 'Authorization header required' });
+      return res.status(401).json({ error: 'No API key configured' });
     }
 
     const pageSize = req.query._page_size || 3;
@@ -95,7 +98,7 @@ app.post('/planet-proxy/quick-search', async (req, res) => {
 });
 
 // Health check
-app.get('/planet-proxy/health', (req, res) => {
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'planet-proxy' });
 });
 
