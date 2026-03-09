@@ -3,6 +3,7 @@ const app = express();
 app.use(express.json());
 
 const PLANET_API = 'https://api.planet.com';
+const PROXY_BASE = 'https://serverless.on-demand.io/apps/planet-proxy';
 
 // Calculate centroid from GeoJSON polygon coordinates
 function getCentroid(geometry) {
@@ -34,20 +35,26 @@ function buildExplorerUrl(feature) {
   return `https://www.planet.com/explorer/#/center/${centroid.lon},${centroid.lat}/zoom/15/dates/${acquired}/items/${feature.id}:${itemType}`;
 }
 
-// Transform API response: replace _links with Planet Explorer URLs
+// Transform API response: replace _links with Planet Explorer URLs + add thumbnail URLs
 function transformResponse(data) {
   if (!data || !data.features) return data;
 
   for (const feature of data.features) {
     const explorerUrl = buildExplorerUrl(feature);
+    const itemType = feature.properties && feature.properties.item_type
+      ? feature.properties.item_type
+      : 'PSScene';
 
     // Replace _links with explorer URL
     feature._links = {
       explorer: explorerUrl
     };
 
-    // Also add explorer_url at top level of feature for easy access
+    // Add explorer_url at top level for browser viewing
     feature.explorer_url = explorerUrl;
+
+    // Add thumbnail_url for embedding in documents/reports (no auth required)
+    feature.thumbnail_url = `${PROXY_BASE}/thumbnail/${itemType}/${feature.id}`;
   }
 
   // Remove pagination _links that also contain auth URLs
@@ -92,6 +99,44 @@ app.post('/quick-search', async (req, res) => {
     const data = await response.json();
     const transformed = transformResponse(data);
     res.json(transformed);
+  } catch (err) {
+    res.status(500).json({ error: 'Proxy error', details: err.message });
+  }
+});
+
+// GET /thumbnail/:itemType/:itemId - proxy Planet API thumbnail image (no auth required)
+app.get('/thumbnail/:itemType/:itemId', async (req, res) => {
+  try {
+    const apiKey = process.env.PLANET_API_KEY;
+    if (!apiKey) {
+      return res.status(401).json({ error: 'No API key configured' });
+    }
+
+    const { itemType, itemId } = req.params;
+    const url = `${PLANET_API}/data/v1/item-types/${itemType}/items/${itemId}/thumb`;
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `api-key ${apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        error: `Planet API error: ${response.status}`,
+        details: errorText
+      });
+    }
+
+    // Forward the image content type and data
+    const contentType = response.headers.get('content-type') || 'image/png';
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=86400'); // Cache 24h
+    res.set('Access-Control-Allow-Origin', '*');
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.send(buffer);
   } catch (err) {
     res.status(500).json({ error: 'Proxy error', details: err.message });
   }
