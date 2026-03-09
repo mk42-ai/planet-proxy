@@ -3,6 +3,7 @@ const app = express();
 app.use(express.json());
 
 const PLANET_API = 'https://api.planet.com';
+const PLANET_TILES = 'https://tiles.planet.com';
 const PROXY_BASE = 'https://serverless.on-demand.io/apps/planet-proxy';
 
 // Calculate centroid from GeoJSON polygon coordinates
@@ -113,13 +114,9 @@ app.get('/thumbnail/:itemType/:itemId', async (req, res) => {
     }
 
     const { itemType, itemId } = req.params;
-    const url = `${PLANET_API}/data/v1/item-types/${itemType}/items/${itemId}/thumb`;
+    const url = `${PLANET_TILES}/data/v1/item-types/${itemType}/items/${itemId}/thumb?api_key=${apiKey}`;
 
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `api-key ${apiKey}`
-      }
-    });
+    const response = await fetch(url);
 
     if (!response.ok) {
       const errorText = await response.text();
